@@ -1,12 +1,13 @@
 MONTADOR ?= bin/montador
 SIM ?= bin/sim
 
-ASMFILES = $(shell find src -type f)
 
-CHARMAP = charmap.mif
-BOOTSTRAPPER = bootstrapper.asm
+CHARMAP = res/charmap/charmap.mif
+BOOTSTRAPPER = src/bootstrapper.asm
 FULL_ASM = build/full.asm
 MIF_OUT = build/game.mif
+
+ASMFILES = $(filter-out $(BOOTSTRAPPER),$(shell find src -type f))
 
 
 .PHONY: all clean run
