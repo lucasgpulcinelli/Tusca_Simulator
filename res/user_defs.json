@@ -1,3 +1,4 @@
 {
-    "MSG_SIZE" : "#11"
+    "starting_pos": "$position(10,10)$",
+    "MSGLEN": "#11"
 }

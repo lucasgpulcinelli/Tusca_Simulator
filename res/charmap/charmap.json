@@ -1,5 +1,10 @@
 {
   "start_char": 32,
+  "color_spacing": 256,
+
+  "screen_width": 40,
+  "screen_height": 30,
+
   "chars": [
     "space",
     "exclamation",
@@ -115,7 +120,5 @@
     "pink",
     "poolgreen",
     "black"
-  ],
-
-  "color_spacing": 256
+  ]
 }

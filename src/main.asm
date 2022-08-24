@@ -1,5 +1,5 @@
 
-msg: var $MSG_SIZE$
+msg: var $MSGLEN$
 static msg + #0, $green_h$
 static msg + #1, $red_e$
 static msg + #2, $purple_x$
@@ -14,9 +14,9 @@ static msg + #10, $green$
 
 
 main:
-    loadn r0, #0
+    loadn r0, $starting_pos$
     loadn r1, #msg
-    loadn r2, $MSG_SIZE$
+    loadn r2, $sum(starting_pos,MSGLEN)$
 
 print_loop:
     loadi r3, r1
