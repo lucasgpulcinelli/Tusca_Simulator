@@ -4,6 +4,7 @@ PREPROCESSOR ?= bin/preprocessor.py
 
 
 CHARMAP = res/charmap/charmap.mif
+USER_DEFS = res/user_defs.json
 CHARMAP_JSON = res/charmap/charmap.json
 BOOTSTRAPPER = src/bootstrapper.asm
 FULL_ASM = build/full.asm
@@ -28,8 +29,8 @@ $(MIF_OUT): $(FULL_PREP)
 	@mkdir -p build
 	@$(MONTADOR) $< $@
 
-$(FULL_PREP): $(FULL_ASM) $(CHARMAP_JSON)
-	@$(PREPROCESSOR) $(CHARMAP_JSON) $< $@
+$(FULL_PREP): $(FULL_ASM) $(CHARMAP_JSON) $(USER_DEFS)
+	@$(PREPROCESSOR) $(CHARMAP_JSON) $(USER_DEFS) $< $@
 
 $(FULL_ASM): $(BOOTSTRAPPER) $(ASMFILES)
 	@mkdir -p build
