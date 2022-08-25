@@ -1,4 +1,4 @@
-# Tusca Simulator
+# TUSCA Simulator
 ## Introduction
 This is the final project made for the subject "Organization and Architecture of Computers", a simple game written in assembly (described below) from scratch by:
 
