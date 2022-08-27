@@ -1,8 +1,11 @@
 
+#define starting_pos $position(10,10)
+
+
 msg: string "Hello, World!"
 
 main:
-    loadn r0, $starting_pos$
+    loadn r0, $starting_pos
     loadn r1, #msg
     loadn r2, #0
 
