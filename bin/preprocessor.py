@@ -2,12 +2,25 @@
 import sys
 import json
 import re
+import os
+
+
+class EvalError(Exception):
+    def __init__(self, *args):
+        if not args:
+            self.msg = None
+        self.msg = args[0]
+    
+    def __str__(self):
+        return f"Macro evaluation error: {self.msg}"
+
 
 def toNumber(no_str):
     '''
     toNumber transforms a number to a string (both if the number can be
     directly converted or if the number has a leading #)
     '''
+    
     if no_str.startswith("#"):
         return int(no_str[1:])
     return int(no_str)
@@ -24,7 +37,7 @@ def preprocessLine(line, defs_mapper, macro_mapper, inside=False):
     '''
     
     #matches any token that needs preprocessing
-    match_any = re.search(f"\${'?' if inside else ''}([\w\(,\))]+)", line)
+    match_any = re.search(f"\${'?' if inside else ''}([\(\)\w,\+\-/%\"\'\[\]]+)", line)
     if not match_any:
         return line
     
@@ -34,7 +47,7 @@ def preprocessLine(line, defs_mapper, macro_mapper, inside=False):
     token = match_any.group(1)
 
     #matches a 'macro'
-    match_macro = re.match("(\w+)\(([\w,]+)\)", token)
+    match_macro = re.match("(\w+)\(([\(\)\w,\+\-/%\"\'\[\]]+)\)", token)
     if not match_macro:
         new_line = line[:start] + defs_mapper[token] + line[end:]
         return new_line
@@ -47,21 +60,26 @@ def preprocessLine(line, defs_mapper, macro_mapper, inside=False):
     arg = []
     for arg_str in arguments_str:
         #if the argument is a definition or another macro call:
-        if not re.match("#?\d+", arg_str):
+        if not re.match("#?[\d-]+", arg_str) and macro_str != "eval":
             arg_str = preprocessLine(arg_str, defs_mapper, macro_mapper, 
                 True
             )
         
-        arg.append(toNumber(arg_str))
+        arg.append(toNumber(arg_str) if macro_str != "eval" else arg_str)
 
     macro_globals = {
         "arg":arg, 
-        "sw":defs_mapper["screen_width"], 
-        "sh":defs_mapper["screen_height"],
+        "sw":toNumber(defs_mapper["screen_width"]), 
+        "sh":toNumber(defs_mapper["screen_height"]),
         "defs":defs_mapper
     }
 
-    new_line = line[:start] + f'#{eval(macro, macro_globals)}' + line[end:]
+    try:
+        eval_ret = eval(macro, macro_globals)
+    except Exception as e:
+        raise EvalError(str(e))
+
+    new_line = line[:start] + f'#{eval_ret}' + line[end:]
     return new_line
 
 def createDefs(line, defs_mapper, macro_mapper):
@@ -104,6 +122,7 @@ def createFullMappers(base_mapper):
     The macros mapper has two basic functions: sum and position. The latter
     just returns the screen position of the pixel at a certain width and height
     '''
+
     start_char = mapper["start_char"]
     color_spacing = mapper["color_spacing"]
     colors = mapper["colors"]
@@ -125,27 +144,50 @@ def createFullMappers(base_mapper):
     }
 
     full_mapper = {}
-    full_mapper["screen_height"] = base_mapper["screen_height"]
-    full_mapper["screen_width"] = base_mapper["screen_width"]
+    full_mapper["screen_height"] = f'#{base_mapper["screen_height"]}'
+    full_mapper["screen_width"] = f'#{base_mapper["screen_width"]}'
     full_mapper.update(combinations_dict)
     full_mapper.update(color_dict)
     full_mapper.update(char_dict)
-    return full_mapper, {"sum": "arg[0]+arg[1]", "position":"arg[0]+arg[1]*sw"}
+
+    full_macros = {
+        "sum": "sum(arg)", 
+        "position":"arg[0]+arg[1]*sw", 
+        "eval": "eval(arg[0])"
+    }
+
+    return full_mapper, full_macros
 
 def preprocess(base_mapper, file_in, file_out):
     '''
     preprocess does the full preprocessing in the file using a base mapper
     '''
+
     defs_mapper, macro_mapper = createFullMappers(base_mapper)
 
-    lineno = 1
-    for line in file_in:
-        newline = preprocessLine(line, defs_mapper, macro_mapper)
-        created = createDefs(newline, defs_mapper, macro_mapper)
-        if not created:
-            file_out.write(newline)
+    lineno = 0
+    try:
+        for line in file_in:
+            newline = preprocessLine(line, defs_mapper, macro_mapper)
+            created = createDefs(newline, defs_mapper, macro_mapper)
+            if not created:
+                file_out.write(newline)
 
-        lineno += 1
+            lineno += 1
+    except EvalError as e:
+        print(f'{e} at macro at line {lineno}', file=sys.stderr)
+    except KeyError as e:
+        print(f'{e} undefined at line {lineno}', file=sys.stderr)
+    except ValueError as e:
+        print(f"return of eval could not be converted to int:\'{e}\' "
+             f"at line {lineno}", file=sys.stderr)
+    else:
+        return
+    
+    #if something went wrong, remove the output file
+    file_out.close()
+    os.remove(file_out.name)
+    sys.exit(-1)
 
 
 
