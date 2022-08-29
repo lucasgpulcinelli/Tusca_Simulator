@@ -8,9 +8,9 @@
 
 ;defines can use definitions and macros themselves, but cannot use variables inside them
 #define starting_pos $position(10,10)
-;#define starting_pos $position(arg[1],10); would throw an error
+;#define starting_pos '$'position(arg[1],10); would throw an error
 
-msg: var $my_macro(1,2,3); simple user defined substitutions to numbers work
+msg: var $my_macro(MSGLEN,-5,5); simple user defined substitutions to numbers work
 static msg + #0, $green_h; characters can be in the format 'color_char' (all chars are in res/charmap/charmap.json)
 static msg + #1, $red_e
 static msg + #2, $purple_x
