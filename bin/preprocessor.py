@@ -1,99 +1,128 @@
 #!/usr/bin/env python3
 import sys
 import json
+import re
+import os
+
+
+class EvalError(Exception):
+    def __init__(self, *args):
+        if not args:
+            self.msg = None
+        self.msg = args[0]
+    
+    def __str__(self):
+        return f"Macro evaluation error: {self.msg}"
+
 
 def toNumber(no_str):
     '''
     toNumber transforms a number to a string (both if the number can be
     directly converted or if the number has a leading #)
     '''
+    
     if no_str.startswith("#"):
         return int(no_str[1:])
     return int(no_str)
 
-def preprocessLine(line, full_mapper, screen_height, screen_width, inside=False):
+def preprocessLine(line, defs_mapper, macro_mapper, inside=False):
     '''
-    preprocessLine does all the preprocessing for a single line, using a mapper
-    given, the screen height and width and a flag for if the call was made
+    preprocessLine does all the substitutions for a single line, using a
+    definitions and macro mapper, besides a flag for if the call was made
     from inside a 'macro' call.
 
-    All variables that should be preprocess need to be in the format
-    $text_to_substitute$ or $macro(argument_1,argument_2)$.
-
-    Two 'macros' are defined: sum() and position(); the latter gives the screen
-    position at a generic x and y (in the usual UI coordinates: from left to
-    right and top to bottom). Both macros are hard coded and there is currently
-    no way to add more, but such functionality is planned.
+    All tokens that should be substituted need to be in the format
+    $text_to_substitute or $macro(argument_1,argument_2,[...]).
+    Note that macro calls cannot have any spaces, same as definitions
     '''
-
-    #find if there is preprocessing to be done
-    dol_loc = line.find("$") if not inside else 0
-    if dol_loc < 0:
+    
+    #matches any token that needs preprocessing
+    match_any = re.search(f"\${'?' if inside else ''}([\(\)\w,\+\-/%\"\'\[\]]+)", line)
+    if not match_any:
         return line
+    
+    start, end = match_any.span()
 
-    dol2_loc = line[dol_loc+1:].find("$") if not inside else len(line)
-    if dol2_loc < 0:
-        raise ValueError("second dollar sign not found")
-    dol2_loc += dol_loc+1
+    #actual thing that needs preprocessing, without leading '$'
+    token = match_any.group(1)
 
-    #find token to be interpreted
-    token = line[dol_loc+1:dol2_loc] if not inside else line
+    #matches a 'macro'
+    match_macro = re.match("(\w+)\(([\(\)\w,\+\-/%\"\'\[\]]+)\)", token)
+    if not match_macro:
+        new_line = line[:start] + defs_mapper[token] + line[end:]
+        return new_line
 
-    subst_value = None
-    if token.startswith("position("):
-        #if it is a macro call, find the delimiters
-        comma_location = token.find(',')
-        closepar_location = token.find(')')
+    macro_str = match_macro.group(1)
+    arguments_str = match_macro.group(2).split(sep=",")
 
-        width = token[len("position("):comma_location]
-        if not(width.isnumeric() or width[1:].isnumeric()):
-            #if the argument is not a number, assume it needs preprocessing
-            width = preprocessLine(width, full_mapper, screen_height, screen_width, True)
+    macro = macro_mapper[macro_str]
+    
+    arg = []
+    for arg_str in arguments_str:
+        #if the argument is a definition or another macro call:
+        if not re.match("#?[\d-]+", arg_str) and macro_str != "eval":
+            arg_str = preprocessLine(arg_str, defs_mapper, macro_mapper, 
+                True
+            )
+        
+        arg.append(toNumber(arg_str) if macro_str != "eval" else arg_str)
 
-        height = token[comma_location+1: closepar_location]
-        if not(height.isnumeric() or height[1:].isnumeric()):
-            #same for the second argument
-            height = preprocessLine(height, full_mapper, screen_height, screen_width, True)
+    macro_globals = {
+        "arg":arg, 
+        "sw":toNumber(defs_mapper["screen_width"]), 
+        "sh":toNumber(defs_mapper["screen_height"]),
+        "defs":defs_mapper
+    }
 
-        width = toNumber(width)
-        height = toNumber(height)
+    try:
+        eval_ret = eval(macro, macro_globals)
+    except Exception as e:
+        raise EvalError(str(e))
 
-        if width > screen_width or height > screen_height:
-            raise ValueError("width or height extend beyond screen")
+    new_line = line[:start] + f'#{eval_ret}' + line[end:]
+    return new_line
 
-        subst_value = f'#{width+height*screen_width}'
-
-    elif token.startswith("sum("):
-        comma_location = token.find(',')
-        closepar_location = token.find(')')
-
-        x = token[len("sum("):comma_location]
-        if not(x.isnumeric() or x[1:].isnumeric()):
-            x = preprocessLine(x, full_mapper, screen_height, screen_width, True)
-
-        y = token[comma_location+1: closepar_location]
-        if not(y.isnumeric() or y[1:].isnumeric()):
-            y = preprocessLine(y, full_mapper, screen_height, screen_width, True)
-
-        x = toNumber(x)
-        y = toNumber(y)
-
-        subst_value = f'#{x+y}'
-    else:
-        subst_value = full_mapper[token]
-
-
-    newline = line[:dol_loc] + subst_value + line[dol2_loc+1:]
-
-    #use recursion if there is more than one substitution in the same line
-    #of if the substitution is from a json and there is a macro inside it
-    return preprocessLine(newline, full_mapper, screen_height, screen_width)
-
-def createFullMapper(base_mapper, user_defs):
+def createDefs(line, defs_mapper, macro_mapper):
     '''
-    createFullMapper creates the actual mapper from the json stored. the whole
-    mapper is a simple dictionary with the text to be substituted
+    createDefs creates macros and definitions based on the 
+    (already preprocessed) line. The definitions must be in the format
+    "#define name value" for definitions, and "#define macro() expression"
+    for macros. 
+    
+    The macro is written in python and has some variables: arg is an array with
+    all arguments, sw and sh are the screen width and height in pixels, and
+    defs is a dict with all definitions.
     '''
+
+    match = re.match("#define (\w+) ([\w#]+)", line)
+    if match:
+        def_name = match.group(1)
+        def_value = match.group(2)
+
+        defs_mapper[def_name] = def_value
+        return True
+    
+    match = re.match("#define (\w+)\(\) ([\w+*/%\[\]\(\) #]+)", line)
+    if not match:
+        return False
+    
+    func_name = match.group(1)
+    func_def = match.group(2).replace("#","")
+
+    macro_mapper[func_name] = func_def
+    
+    return True
+
+
+def createFullMappers(base_mapper):
+    '''
+    createFullMapper creates the actual mappers from the json stored.
+    The whole mapper is a simple dictionary with the text to be substituted.
+
+    The macros mapper has two basic functions: sum and position. The latter
+    just returns the screen position of the pixel at a certain width and height
+    '''
+
     start_char = mapper["start_char"]
     color_spacing = mapper["color_spacing"]
     colors = mapper["colors"]
@@ -114,40 +143,58 @@ def createFullMapper(base_mapper, user_defs):
         for i, color in enumerate(colors) for j, char in enumerate(chars)
     }
 
-    full_mapper = user_defs.copy()
+    full_mapper = {}
+    full_mapper["screen_height"] = f'#{base_mapper["screen_height"]}'
+    full_mapper["screen_width"] = f'#{base_mapper["screen_width"]}'
     full_mapper.update(combinations_dict)
     full_mapper.update(color_dict)
     full_mapper.update(char_dict)
-    return full_mapper
 
+    full_macros = {
+        "sum": "sum(arg)", 
+        "position":"arg[0]+arg[1]*sw", 
+        "eval": "eval(arg[0])"
+    }
 
-def preprocess(base_mapper, user_defs, file_in, file_out):
+    return full_mapper, full_macros
+
+def preprocess(base_mapper, file_in, file_out):
     '''
-    preprocess does the full preprocessing in the file using a base mapper and
-    the user definitions json
+    preprocess does the full preprocessing in the file using a base mapper
     '''
-    full_mapper = createFullMapper(base_mapper, user_defs)
-    screen_height = base_mapper["screen_height"]
-    screen_width = base_mapper["screen_width"]
 
-    lineno = 1
+    defs_mapper, macro_mapper = createFullMappers(base_mapper)
+
+    lineno = 0
     try:
         for line in file_in:
-            newline = preprocessLine(
-                    line, full_mapper, screen_height, screen_width
-            )
-            file_out.write(newline)
+            newline = preprocessLine(line, defs_mapper, macro_mapper)
+            created = createDefs(newline, defs_mapper, macro_mapper)
+            if not created:
+                file_out.write(newline)
 
             lineno += 1
-    except (ValueError, KeyError) as e:
-        print(f"error at line {lineno}: {e}", file=sys.stderr)
-        sys.exit(-1)
+    except EvalError as e:
+        print(f'{e} at macro at line {lineno}', file=sys.stderr)
+    except KeyError as e:
+        print(f'{e} undefined at line {lineno}', file=sys.stderr)
+    except ValueError as e:
+        print(f"return of eval could not be converted to int:\'{e}\' "
+             f"at line {lineno}", file=sys.stderr)
+    else:
+        return
+    
+    #if something went wrong, remove the output file
+    file_out.close()
+    os.remove(file_out.name)
+    sys.exit(-1)
+
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 5:
+    if len(sys.argv) != 4:
         print(
-            f"usage: {sys.argv[0]} charmap.json user_defs.json "
+            f"usage: {sys.argv[0]} charmap.json "
             f"file_in.asm file_out.asm", file=sys.stderr
         )
         sys.exit(-1)
@@ -156,14 +203,10 @@ if __name__ == "__main__":
     mapper = json.load(file_mapper)
     file_mapper.close()
 
-    file_user_defs = open(sys.argv[2], "r")
-    user_defs = json.load(file_user_defs)
-    file_user_defs.close()
+    file_in = open(sys.argv[2], "r")
+    file_out = open(sys.argv[3], "w")
 
-    file_in = open(sys.argv[3], "r")
-    file_out = open(sys.argv[4], "w")
-
-    preprocess(mapper, user_defs, file_in, file_out)
+    preprocess(mapper, file_in, file_out)
 
     file_in.close()
     file_out.close()
