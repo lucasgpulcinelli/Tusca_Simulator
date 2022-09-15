@@ -62,7 +62,7 @@ def print_color(char, color):
         print("Cor errada")
         inp.close()
         out.close()
-        os.remove(out)
+        os.remove(sys.argv[2])
         sys.exit(-1)
 
 # Read input archive
