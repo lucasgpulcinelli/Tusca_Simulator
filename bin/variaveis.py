@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import sys
 
 # Var syntax:
@@ -14,9 +15,10 @@ import sys
 
 
 # Input and output archives
-nome_arq = input("Digite o nome do arquivo de input:")
-inp = open(nome_arq, "r")
-out = open("output.txt", "w")
+if len(sys.argv) < 3:
+    print(f"Error, use {sys.argv[0]} input.vars output.asm", file=sys.stderr)
+inp = open(sys.argv[1], "r")
+out = open(sys.argv[2], "w")
 
 # Replace special chars
 special_chars = [' ', '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.', '/', ':', ';', '<', '=', '>', '?',
@@ -86,7 +88,7 @@ while cur_pos < len(text):
         cur_pos = bracket_pos + 1
         
         # Print define array
-        out.write("#define {}_len {}".format(var, size_array))
+        out.write("#define {}_len {}\n".format(var, size_array))
         # Print array name and size
         out.write("{} : var #{}\n".format(var, size_array))
         
@@ -129,7 +131,7 @@ while cur_pos < len(text):
         cur_pos += 1
 
         # Print string define
-        out.write("#define {}_len {}".format(var, size_string))
+        out.write("#define {}_len {}\n".format(var, size_string))
         # Print string size
         out.write("{} : var #{}\n".format(var, size_string))
 
