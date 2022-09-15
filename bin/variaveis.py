@@ -1,3 +1,5 @@
+import sys
+
 # Var syntax:
     # Array: starts with [ and ends with ]
     #   array_name = [1,2,3,4,5]
@@ -82,6 +84,9 @@ while cur_pos < len(text):
         size_array = len(array)
 
         cur_pos = bracket_pos + 1
+        
+        # Print define array
+        out.write("#define {}_len {}".format(var, size_array))
         # Print array name and size
         out.write("{} : var #{}\n".format(var, size_array))
         
@@ -122,6 +127,9 @@ while cur_pos < len(text):
             j += 1
         size_string = (quot_pos-1) - cur_pos - 5*(count)
         cur_pos += 1
+
+        # Print string define
+        out.write("#define {}_len {}".format(var, size_string))
         # Print string size
         out.write("{} : var #{}\n".format(var, size_string))
 
