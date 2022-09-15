@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import sys
+import os
 
 # Var syntax:
     # Array: starts with [ and ends with ]
@@ -59,7 +60,10 @@ def print_color(char, color):
         return
     else:
         print("Cor errada")
-        return
+        inp.close()
+        out.close()
+        os.remove(out)
+        sys.exit(-1)
 
 # Read input archive
 while cur_pos < len(text):
