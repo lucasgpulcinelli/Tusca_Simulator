@@ -1,7 +1,8 @@
 MONTADOR ?= bin/montador
 SIM ?= bin/sim
-PREPROCESSOR ?= bin/preprocessor.py
-VARS_PROCESSOR ?= bin/variaveis.py
+ICMC_PREPROCESSOR ?= modules/ICMC-assembly-preprocessor
+PREPROCESSOR ?= $(ICMC_PREPROCESSOR)/src/preprocessor.py
+VARS_PROCESSOR ?= $(ICMC_PREPROCESSOR)/src/variaveis.py
 
 
 CHARMAP = res/charmap/charmap.mif

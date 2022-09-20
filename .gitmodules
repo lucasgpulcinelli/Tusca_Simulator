@@ -1,0 +1,3 @@
+[submodule "modules/ICMC-assembly-preprocessor"]
+	path = modules/ICMC-assembly-preprocessor
+	url = git@github.com:lucasgpulcinelli/ICMC-assembly-preprocessor.git
